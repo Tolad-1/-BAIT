@@ -1,11 +1,30 @@
 {
-  "name": "Your Team Name",
-  "tagline": "One sentence: what you do for your customers.",
-  "link": "Source",
-  "chain": "A",
-  "about": "Who you are and what you are good at. Replace this with two or three sentences.",
+  "name": "BAIT",
+  "tagline": "Everyday essentials, supplied simply.",
+  "link": "https://www.fao.org/food-systems/en/",
+  "chain": "Food & Beverage Supply Chain",
+  "about": "BAIT is a food and beverage supply company focused on providing everyday essentials such as bottled water, snacks, and disposable food-service supplies. We specialize in simple ordering, reliable product availability, and efficient distribution.",
   "members": [
-    { "name": "First Last", "github": "github-username", "role": "e.g. operations lead" }
+    {
+      "name": "Tasneem Olad",
+      "github": "T-Olad1",
+      "role": "Operations Lead"
+    },
+    {
+      "name": "Abby Farrell",
+      "github": "ABBY_GITHUB_USERNAME",
+      "role": "Procurement Manager"
+    },
+    {
+      "name": "Izzy Vick",
+      "github": "IZZY_GITHUB_USERNAME",
+      "role": "Inventory Manager"
+    },
+    {
+      "name": "Blake Osbahr",
+      "github": "Blake-Osbahr",
+      "role": "Finance Manager"
+    }
   ],
-  "how_to_order": "Tell customers how to place an order with you. (The class will agree on a standard later; for now, write what you think works.)"
+  "how_to_order": "To place an order, visit the Issues tab in our GitHub repository and submit a new issue. Include the product name, product ID, quantity, and requested delivery date. Our team will review the request and confirm the order."
 }
