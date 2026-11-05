@@ -1,8 +1,16 @@
 {
   "items": [
     {
-      "name": "What you offer",
-      "description": "Describe it so a buyer at another table could order it correctly without talking to you."
+      "name": "BAIT-001: Bottled Water (24-Pack)",
+      "description": "Case of 24 bottles of drinking water. Price: $6.00 per case. Minimum order: 1 case. Lead time: 1 business day. To order, specify product ID BAIT-001 and the number of cases requested."
+    },
+    {
+      "name": "BAIT-002: Granola Bars (12-Pack)",
+      "description": "Box containing 12 granola bars. Price: $8.00 per box. Minimum order: 1 box. Lead time: 2 business days. To order, specify product ID BAIT-002 and the number of boxes requested."
+    },
+    {
+      "name": "BAIT-003: Disposable Coffee Cups (50-Pack)",
+      "description": "Pack of 50 disposable paper coffee cups. Price: $10.00 per pack. Minimum order: 1 pack. Lead time: 2 business days. To order, specify product ID BAIT-003 and the number of packs requested."
     }
   ]
 }
