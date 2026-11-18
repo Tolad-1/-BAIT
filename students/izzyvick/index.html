@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MPFN | Minnesota Corn Sourcing Signal</title>
+<!-- Source: USDA NASS Quick Stats, https://quickstats.nass.usda.gov/results/EE31286B-22C5-3414-AE4C-E855D535F1F1
+     Download date: 2026-11-17 (date uploaded to this project; confirm original USDA download date before submitting).
+     Data stored in corn-production.csv alongside this HTML file. Extracted from supplied USDA CSV:
+     Program=SURVEY, Domain=TOTAL, Period=YEAR, Geo Level=STATE, State=MINNESOTA,
+     Data Item=CORN, GRAIN - PRODUCTION, MEASURED IN BU. No sample values are used. -->
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#17302a;background:#f3f6f3}*{box-sizing:border-box}body{margin:0}.wrap{max-width:1040px;margin:auto;padding:28px 20px 70px}header{background:#173c31;color:white;padding:30px 0}header .wrap{padding-top:0;padding-bottom:0}h1{font-size:clamp(1.7rem,4vw,2.5rem);margin:.3rem 0}h2{font-size:1.1rem;margin:0 0 14px}.eyebrow{font-size:.8rem;text-transform:uppercase;letter-spacing:.13em;color:#a8d5b6}header p{max-width:750px;line-height:1.5;color:#d9e9e0}.panel{background:white;border:1px solid #dce6de;border-radius:14px;padding:22px;margin-top:18px;box-shadow:0 3px 14px #173c3109}.top{display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap}label{font-weight:650}select{padding:10px 14px;border:1px solid #9bb2a5;border-radius:8px;font:inherit;background:white}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px}.metric{background:#f0f6f1;border-radius:10px;padding:18px}.metric small{display:block;color:#486459;margin-bottom:8px}.metric strong{font-size:clamp(1.25rem,3vw,1.9rem)}.metric span{display:block;font-size:.8rem;color:#486459;margin-top:5px}.chart{width:100%;height:auto;display:block}.axis{fill:#52675e;font-size:12px}.bar{fill:#9bbbab}.bar.active{fill:#236c50}.bar:hover{fill:#378e6c}.gridline{stroke:#dce6de}.status{border-left:4px solid #236c50;background:#f0f6f1;padding:15px 18px;border-radius:5px;line-height:1.55}.muted{color:#51675d;line-height:1.6}.error{color:#9b2828;background:#fff2f2;padding:14px;border-radius:8px}.foot{font-size:.88rem;color:#51675d}a{color:#176c50}@media(max-width:650px){.metrics{grid-template-columns:1fr}.wrap{padding-left:14px;padding-right:14px}.panel{padding:16px}}
+</style>
+</head>
+<body>
+<header><div class="wrap"><div class="eyebrow">Minnesota Agriculture · MPFN</div><h1>Corn production & sourcing signal</h1><p>Decision question: Based on historical Minnesota corn production, should MPFN plan for tighter ingredient sourcing conditions in the upcoming production year?</p></div></header>
+<main class="wrap">
+<section class="panel"><div class="top"><h2>Annual production overview</h2><div><label for="year">Select year </label><select id="year" disabled><option>Loading data…</option></select></div></div><div id="message" aria-live="polite"></div><div class="metrics"><div class="metric"><small>Selected-year production</small><strong id="production">—</strong><span>Bushels</span></div><div class="metric"><small>Versus historical average</small><strong id="comparison">—</strong><span>2015–2025 average, including selected year</span></div><div class="metric"><small>Change from previous year</small><strong id="yoy">—</strong><span>Annual production change</span></div></div></section>
+<section class="panel"><h2>Production by year</h2><p class="muted">Select a year above or click a bar to compare production across the 11 annual USDA records.</p><svg id="chart" class="chart" viewBox="0 0 900 340" role="img" aria-label="Bar chart of Minnesota annual corn production"></svg><p class="foot">Source: USDA NASS Quick Stats · Annual SURVEY totals · Units: billions of bushels · Selected year shown in dark green.</p></section>
+<section class="panel"><h2>What does this mean for sourcing?</h2><div class="status" id="assessment">Waiting for data…</div><p class="muted">Interpretation rule: a year below the 2015–2025 average signals relatively lower Minnesota production; a year at or above average signals relatively stronger production. This is a historical comparison, <b>not a prediction of next year's supply</b>. Prices, inventories, demand, transportation, and supplier commitments must also be checked.</p></section>
+<section class="panel"><h2>Data lineage & limitations</h2><p class="muted">The page loads <code>corn-production.csv</code> stored in the same GitHub folder. These are USDA NASS statewide annual SURVEY production totals for corn harvested for grain, not monthly forecasts, county records, or census breakdowns. The source website is not contacted when the page runs.</p><p class="foot"><a href="https://quickstats.nass.usda.gov/results/EE31286B-22C5-3414-AE4C-E855D535F1F1">Original USDA Quick Stats query</a> · Dataset copied into project November 17, 2026 (confirm original download date) · Historical window: 2015–2025</p></section>
+</main>
+<script>
+const csvFile = 'corn-production.csv';
+let records = []; // Data is kept in this array in browser memory after the CSV loads.
+const yearPicker = document.getElementById('year');
+const fmt = new Intl.NumberFormat('en-US');
+const pct = n => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
+// This parser handles the quoted thousands-separated Value field in the supplied USDA CSV.
+function parseCSV(text) {
+  return text.trim().split(/\r?\n/).slice(1).map(line => {
+    const match = line.match(/^(\d{4}),"([^"]+)","?([\d,]+)"?$/);
+    if (!match) throw new Error('Unexpected CSV format: ' + line);
+    return {year: Number(match[1]), item: match[2], value: Number(match[3].replaceAll(',', ''))};
+  });
+}
+function render(selectedYear) {
+  const selected = records.find(r => r.year === selectedYear);
+  const index = records.findIndex(r => r.year === selectedYear);
+  const average = records.reduce((sum, r) => sum + r.value, 0) / records.length;
+  const difference = (selected.value / average - 1) * 100;
+  const prior = records[index - 1];
+  document.getElementById('production').textContent = fmt.format(selected.value);
+  document.getElementById('comparison').textContent = pct(difference);
+  document.getElementById('yoy').textContent = prior ? pct((selected.value / prior.value - 1) * 100) : 'N/A';
+  document.getElementById('assessment').textContent = difference < 0
+    ? `${selectedYear} production was ${Math.abs(difference).toFixed(1)}% below the 2015–2025 average. This indicates a historically lower-production year; MPFN should review supplier capacity, inventories, and contracts before deciding whether to add sourcing buffers.`
+    : `${selectedYear} production was ${difference.toFixed(1)}% at or above the 2015–2025 average. This does not indicate unusually low statewide production in that year, but MPFN should still check prices, available inventory, and supplier commitments before making next-year sourcing decisions.`;
+  const svg = document.getElementById('chart');
+  const left=65, top=20, width=805, height=260, max=Math.ceil(Math.max(...records.map(r=>r.value))/500000000)*500000000;
+  const grid=[0,.25,.5,.75,1].map(t=>`<line class="gridline" x1="${left}" y1="${top+height*(1-t)}" x2="${left+width}" y2="${top+height*(1-t)}"/><text class="axis" text-anchor="end" x="${left-9}" y="${top+height*(1-t)+4}">${(max*t/1e9).toFixed(1)}</text>`).join('');
+  const step=width/records.length, barWidth=step*.62;
+  const bars=records.map((r,i)=>{const h=r.value/max*height,x=left+i*step+(step-barWidth)/2,y=top+height-h;return `<g data-year="${r.year}" tabindex="0" role="button" aria-label="Select ${r.year}: ${fmt.format(r.value)} bushels"><rect class="bar ${r.year===selectedYear?'active':''}" x="${x}" y="${y}" width="${barWidth}" height="${h}" rx="3"><title>${r.year}: ${fmt.format(r.value)} bushels</title></rect><text class="axis" text-anchor="middle" x="${x+barWidth/2}" y="${top+height+21}">${r.year}</text></g>`}).join('');
+  svg.innerHTML = grid+bars+`<text class="axis" x="15" y="14">Billion bu</text>`;
+  svg.querySelectorAll('[data-year]').forEach(el=>{const choose=()=>{yearPicker.value=el.dataset.year;render(Number(el.dataset.year));};el.addEventListener('click',choose);el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();choose();}});});
+}
+// The data comes in from the stored local CSV, not from a live USDA API.
+fetch(csvFile).then(response=>{if(!response.ok)throw new Error(`HTTP ${response.status}`);return response.text();}).then(text=>{
+  records = parseCSV(text).sort((a,b)=>a.year-b.year);
+  if(records.length!==11 || records[0].year!==2015 || records.at(-1).year!==2025 || records.some(r=>!Number.isFinite(r.value))) throw new Error('Unexpected annual data; verify the CSV.');
+  yearPicker.innerHTML=records.map(r=>`<option value="${r.year}">${r.year}</option>`).join('');
+  yearPicker.value=String(records.at(-1).year);yearPicker.disabled=false;
+  yearPicker.addEventListener('change',()=>render(Number(yearPicker.value)));
+  render(Number(yearPicker.value));
+}).catch(err=>{document.getElementById('message').innerHTML=`<p class="error">Unable to load stored data: ${err.message}. Run this page on GitHub Pages or a local web server, and keep corn-production.csv beside index.html.</p>`;yearPicker.innerHTML='<option>Data unavailable</option>';});
+</script>
+</body></html>
