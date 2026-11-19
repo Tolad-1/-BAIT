@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Minnesota Ag Supply Chain | Weather Dispatch Decision</title>
+<style>
+:root{--ink:#18251f;--muted:#63736a;--line:#dce5df;--bg:#f4f7f4;--card:#fff;--green:#176b45;--amber:#a85b08;--red:#a52b2b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{background:#173d2c;color:white;padding:28px max(22px,calc((100vw - 1160px)/2))}
+header h1{font-size:clamp(24px,4vw,36px);line-height:1.12;margin:0 0 9px}header p{margin:0;color:#d5e7db;max-width:850px}
+main{max-width:1160px;margin:22px auto;padding:0 18px 40px}.panel,.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 2px 8px #173d2c0a}
+.filters{display:grid;grid-template-columns:repeat(3,minmax(150px,1fr));gap:14px;margin-bottom:16px}
+label{display:block;font-weight:650;font-size:13px;margin-bottom:6px;color:#33483b}select{width:100%;padding:11px;border:1px solid #cbd8cf;border-radius:8px;background:white;color:var(--ink);font:inherit}
+.status{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:14px 0}.pill{display:inline-block;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:750;background:#e8eee9;color:#405448}
+.decision{display:grid;grid-template-columns:1fr auto;gap:18px;align-items:center;border-left:6px solid var(--amber);margin-bottom:16px}
+.decision h2{margin:0 0 5px;font-size:22px}.decision p{margin:0;color:var(--muted)}.decision strong{font-size:18px}
+.metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}.metric{padding:14px}.metric .k{font-size:12px;color:var(--muted);font-weight:650}.metric .v{font-size:24px;font-weight:750;margin-top:5px}.metric .sub{font-size:12px;color:var(--muted)}
+.chartbox{margin-bottom:16px}.charthead{display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap}.charthead h2{margin:0;font-size:19px}canvas{width:100%;height:300px;display:block;margin-top:12px}
+.note{font-size:13px;color:var(--muted)}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.card h3{margin:0 0 8px;font-size:16px}.card p{margin:5px 0}.error{color:var(--red);font-weight:650}.footer{margin-top:16px;color:var(--muted);font-size:12px}
+button{border:0;background:var(--green);color:white;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer}button:disabled{opacity:.5;cursor:wait}
+@media(max-width:760px){.filters{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.decision{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}canvas{height:260px}}
+</style>
+</head>
+<body>
+<header>
+<h1>Minnesota Ag Weather Dispatch</h1>
+<p>Decision support for whether to release LTL loads today or consolidate into a full truck. Weather is the primary signal; this is an operational screening aid, not a road-condition guarantee.</p>
+</header>
+<main>
+<section class="panel">
+<div class="filters">
+<div><label for="county">County / dispatch hub</label><select id="county">
+<option value="46.7867,-96.1422">Clay (Moorhead)</option><option value="46.8739,-96.7678">Cass (Fargo-area reference)</option>
+<option value="46.7296,-96.0008">Becker (Detroit Lakes)</option><option value="46.3555,-94.2008">Crow Wing (Brainerd)</option>
+<option value="45.5842,-95.9130">Stevens (Morris)</option><option value="45.5608,-94.1625">Stearns (St. Cloud)</option>
+<option value="45.1220,-95.0433">Kandiyohi (Willmar)</option><option value="44.0121,-95.3180">Cottonwood (Windom)</option>
+<option value="43.6666,-93.3680">Freeborn (Albert Lea)</option><option value="43.9861,-92.4802">Olmsted (Rochester)</option>
+<option value="44.1636,-93.9994">Blue Earth (Mankato)</option><option value="44.0122,-96.3250">Rock (Luverne)</option>
+<option value="44.4480,-95.7880">Lyon (Marshall)</option><option value="45.1280,-93.4000">Anoka (north metro)</option>
+<option value="44.9537,-93.0900">Ramsey (St. Paul)</option>
+</select></div>
+<div><label for="year">Weather year</label><select id="year"><option value="2026">2026 · current / forecast</option><option value="2025">2025 · historical</option><option value="2024">2024 · historical</option></select></div>
+<div><label for="crop">Crop / freight context</label><select id="crop"><option value="corn">Corn</option><option value="soy">Soybeans</option><option value="wheat">Wheat</option><option value="beets">Sugar beets</option><option value="general">General ag inputs / mixed</option></select></div>
+</div>
+<div class="status"><span class="pill" id="sourceStatus">Connecting to Open-Meteo…</span><span class="pill" id="period">—</span><button id="refresh">Refresh weather</button></div>
+</section>
+
+<section class="panel decision" id="decision" style="margin-top:16px">
+<div><h2 id="decisionTitle">Loading weather risk…</h2><p id="decisionText">Fetching hourly forecast and weather indicators for the selected hub.</p></div>
+<strong id="riskScore">—</strong>
+</section>
+
+<section class="metrics">
+<div class="card metric"><div class="k">Weather now</div><div class="v" id="weather">—</div><div class="sub" id="temp">Temperature —</div></div>
+<div class="card metric"><div class="k">Precipitation probability</div><div class="v" id="precip">—</div><div class="sub">Peak today</div></div>
+<div class="card metric"><div class="k">Snowfall</div><div class="v" id="snow">—</div><div class="sub">Total today</div></div>
+<div class="card metric"><div class="k">Visibility</div><div class="v" id="visibility">—</div><div class="sub">Lowest today</div></div>
+<div class="card metric"><div class="k">Wind speed</div><div class="v" id="wind">—</div><div class="sub">Peak today</div></div>
+</section>
+
+<section class="panel chartbox">
+<div class="charthead"><h2>Next 7 days · weather factors</h2><span class="note">Daily precipitation chance, snowfall, and wind</span></div>
+<canvas id="chart" aria-label="Chart of precipitation probability, snowfall and wind over the next seven days"></canvas>
+<div class="note">Bars show precipitation probability (%); lines show snowfall (cm) and wind speed (km/h). The chart updates when county, year, or crop changes.</div>
+</section>
+
+<div class="grid2">
+<section class="card"><h3>How to use the recommendation</h3>
+<p><b>Push LTL:</b> weather indicators are below the screening thresholds, so smaller loads may move without waiting solely for weather.</p>
+<p><b>Wait / consolidate:</b> elevated precipitation, snow, low visibility, or wind raises delay and handling risk. Hold non-urgent LTL where practical and build a full truck.</p>
+<p class="note">Crop selection changes the risk tolerance used by this simple screening rule; it does not change the weather forecast. Confirm carrier capacity, road restrictions, local advisories, loading-site conditions, and customer urgency before dispatch.</p></section>
+<section class="card"><h3>Data source and storage</h3>
+<p><b>Source:</b> Open-Meteo forecast API for the current year and Open-Meteo Historical Weather API for 2024–2025. Requests use the selected hub's latitude/longitude.</p>
+<p><b>Fields:</b> weather code, precipitation probability, snowfall, visibility, wind speed, and temperature. Units are shown in the dashboard.</p>
+<p><b>Where stored:</b> this page keeps the API response in JavaScript memory only while it is open. It does not write weather data to a server, database, cookie, or local storage. Reloading the page fetches fresh data.</p>
+<p class="note">County choices are representative Minnesota dispatch hubs, not official county boundary centroids. A single point forecast may not represent every road or farm in a county.</p></section>
+</div>
+<div class="footer">Weather data provided by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>. Forecast values and API availability can change. This file needs an internet connection to retrieve weather.</div>
+</main>
+<script>
+// Open-Meteo is the live source. We fetch only the selected location and date range.
+const $ = id => document.getElementById(id);
+let weatherRows = []; // The returned weather data lives in this in-memory array only; it is not persisted.
+const cropTolerance = {corn:1,soy:1.05,wheat:0.95,beets:0.9,general:1};
+const labels = {0:"Clear",1:"Mostly clear",2:"Partly cloudy",3:"Cloudy",45:"Fog",48:"Freezing fog",51:"Drizzle",53:"Drizzle",55:"Heavy drizzle",61:"Rain",63:"Rain",65:"Heavy rain",71:"Snow",73:"Snow",75:"Heavy snow",77:"Snow grains",80:"Showers",81:"Showers",82:"Heavy showers",85:"Snow showers",86:"Heavy snow",95:"Thunderstorm",96:"Thunderstorm",99:"Severe storm"};
+function dayKey(iso){return iso.slice(0,10)}
+function max(a){return a.length?Math.max(...a.filter(Number.isFinite)):0}
+function min(a){const v=a.filter(Number.isFinite);return v.length?Math.min(...v):0}
+function mean(a){const v=a.filter(Number.isFinite);return v.length?v.reduce((x,y)=>x+y,0)/v.length:0}
+function weatherLabel(code){return labels[code]||"Variable"}
+function fmt(n,d=0){return Number.isFinite(n)?n.toFixed(d):"—"}
+async function load(){
+ const [lat,lon]=$("county").value.split(",").map(Number), year=+$("year").value;
+ $("refresh").disabled=true;$("sourceStatus").textContent="Loading Open-Meteo data…";
+ $("decisionTitle").textContent="Loading weather risk…";$("decisionText").textContent="Requesting weather data for the selected hub.";
+ try{
+  let url, start, end, data;
+  if(year===2026){
+   // Forecast endpoint supplies current conditions and up to 7 forecast days.
+   url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m,visibility&hourly=precipitation_probability,snowfall,visibility,wind_speed_10m&daily=precipitation_probability_max,snowfall_sum,wind_speed_10m_max&forecast_days=7&timezone=America%2FChicago`;
+   data=await (await fetch(url)).json();
+   weatherRows=data.hourly.time.map((t,i)=>({time:t,precip:data.hourly.precipitation_probability[i],snow:data.hourly.snowfall[i],visibility:data.hourly.visibility[i],wind:data.hourly.wind_speed_10m[i]}));
+   start=data.daily.time[0];end=data.daily.time[data.daily.time.length-1];
+   $("weather").textContent=weatherLabel(data.current.weather_code);$("temp").textContent=`${fmt(data.current.temperature_2m,1)} °C`;
+  } else {
+   // Historical endpoint retrieves the chosen calendar year; dashboard summarizes the first seven days from Jan 1.
+   url=`https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${year}-01-01&end_date=${year}-12-31&hourly=precipitation,snowfall,visibility,wind_speed_10m&daily=snowfall_sum,wind_speed_10m_max&timezone=America%2FChicago`;
+   data=await (await fetch(url)).json();
+   if(!data.hourly) throw new Error(data.reason||"Historical data unavailable");
+   weatherRows=data.hourly.time.map((t,i)=>({time:t,precip:data.hourly.precipitation[i]>0?100:0,snow:data.hourly.snowfall[i],visibility:data.hourly.visibility[i],wind:data.hourly.wind_speed_10m[i]}));
+   start=`${year}-01-01`;end=`${year}-01-07`;
+   $("weather").textContent="Historical";$("temp").textContent=`${year} archive`;
+  }
+  if(data.error) throw new Error(data.reason||"Open-Meteo returned an error");
+  const today=weatherRows.filter(r=>dayKey(r.time)===start);
+  const current=data.current||{};
+  $("precip").textContent=`${fmt(max(today.map(r=>r.precip)))}%`;
+  $("snow").textContent=`${fmt(today.reduce((s,r)=>s+(r.snow||0),0),1)} cm`;
+  $("visibility").textContent=`${fmt(min(today.map(r=>r.visibility))/1000,1)} km`;
+  $("wind").textContent=`${fmt(max(today.map(r=>r.wind)),0)} km/h`;
+  if(year!==2026){$("precip").textContent=`${fmt(max(today.map(r=>r.precip)))}%`; $("period").textContent=`Historical sample: ${start} to ${end}`;}
+  else $("period").textContent=`Forecast: ${start} to ${end} · America/Chicago`;
+  $("sourceStatus").textContent="Open-Meteo data loaded";
+  drawChart(year===2026?data.daily:null);
+  assess(today);
+ }catch(e){
+  $("sourceStatus").textContent="Weather data unavailable";$("decisionTitle").textContent="No dispatch recommendation";$("decisionText").innerHTML=`<span class="error">${e.message||"Could not retrieve weather."}</span> Check your internet connection or try again.`;$("riskScore").textContent="—";
+ }finally{$("refresh").disabled=false}
+}
+function assess(rows){
+ const p=max(rows.map(r=>r.precip)),s=rows.reduce((a,r)=>a+(r.snow||0),0),v=min(rows.map(r=>r.visibility))/1000,w=max(rows.map(r=>r.wind));
+ // Simple transparent score: precipitation, snow, poor visibility and strong wind each add risk points.
+ let score=(p>=60?3:p>=35?2:p>=20?1:0)+(s>=2?3:s>0?1:0)+(v<1?3:v<3?2:v<5?1:0)+(w>=50?3:w>=35?2:w>=25?1:0);
+ score*=cropTolerance[$("crop").value]||1;
+ const high=score>=5,title=high?"Wait / consolidate into a full truck":"Push LTL trucks (weather screen)";
+ $("decision").style.borderLeftColor=high?"#a52b2b":"#176b45";
+ $("decisionTitle").textContent=title;$("riskScore").textContent=`Risk ${score.toFixed(1)} / 12`;
+ $("decisionText").textContent=`Today: precipitation chance ${fmt(p)}%, snowfall ${fmt(s,1)} cm, visibility ${fmt(v,1)} km, peak wind ${fmt(w)} km/h. ${high?"Weather-related delay risk is elevated; defer non-urgent LTL where practical.":"Weather indicators are below the hold threshold; weather alone does not justify waiting to build a full truck."}`;
+}
+function drawChart(daily){
+ const c=$("chart"),ctx=c.getContext("2d"),w=c.clientWidth,h=c.clientHeight,dpr=window.devicePixelRatio||1;
+ c.width=w*dpr;c.height=h*dpr;ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
+ let days=[];
+ if(daily){days=daily.time.map((t,i)=>({label:t.slice(5),p:daily.precipitation_probability_max?.[i]??0,s:daily.snowfall_sum?.[i]??0,w:daily.wind_speed_10m_max?.[i]??0}));}
+ else {
+  const groups={};weatherRows.forEach(r=>{const k=dayKey(r.time);(groups[k]??=[]).push(r)});
+  days=Object.entries(groups).slice(0,7).map(([k,a])=>({label:k.slice(5),p:max(a.map(x=>x.precip)),s:a.reduce((z,x)=>z+(x.snow||0),0),w:max(a.map(x=>x.wind))}));
+ }
+ const L=42,R=18,T=20,B=38, pw=w-L-R,ph=h-T-B;
+ ctx.font="11px system-ui";ctx.strokeStyle="#e2e9e4";ctx.fillStyle="#65756b";ctx.lineWidth=1;
+ for(let i=0;i<=4;i++){let y=T+ph*i/4;ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-R,y);ctx.stroke();ctx.fillText(`${100-i*25}%`,4,y+4)}
+ const step=pw/Math.max(days.length,1),bw=Math.min(30,step*.52);
+ days.forEach((d,i)=>{let x=L+step*i+step/2;let bh=ph*d.p/100;ctx.fillStyle="#8bbba0";ctx.fillRect(x-bw/2,T+ph-bh,bw,bh);ctx.fillStyle="#52645a";ctx.textAlign="center";ctx.fillText(d.label,x,h-15)});
+ function line(key,scale,color){ctx.beginPath();days.forEach((d,i)=>{let x=L+step*i+step/2,y=T+ph-(Math.min(d[key],scale)/scale)*ph;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.stroke();days.forEach((d,i)=>{let x=L+step*i+step/2,y=T+ph-(Math.min(d[key],scale)/scale)*ph;ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fillStyle=color;ctx.fill()})}
+ line("s",10,"#3275b8");line("w",80,"#c47b27");
+ ctx.textAlign="left";ctx.fillStyle="#8bbba0";ctx.fillRect(L,4,9,9);ctx.fillStyle="#52645a";ctx.fillText("Precipitation %",L+13,13);
+ ctx.fillStyle="#3275b8";ctx.fillRect(L+120,4,9,9);ctx.fillStyle="#52645a";ctx.fillText("Snow cm",L+133,13);
+ ctx.fillStyle="#c47b27";ctx.fillRect(L+205,4,9,9);ctx.fillStyle="#52645a";ctx.fillText("Wind km/h",L+218,13);
+}
+["county","year","crop"].forEach(id=>$(id).addEventListener("change",load));$("refresh").addEventListener("click",load);
+window.addEventListener("resize",()=>drawChart(null));load();
+</script>
+</body></html>
