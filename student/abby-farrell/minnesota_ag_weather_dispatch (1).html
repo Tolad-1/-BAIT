@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Minnesota Ag Supply Chain | Weather Dispatch Decision</title>
+<style>
+:root{--ink:#18251f;--muted:#63736a;--line:#dce5df;--bg:#f4f7f4;--card:#fff;--green:#176b45;--amber:#a85b08;--red:#a52b2b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{background:#173d2c;color:white;padding:28px max(22px,calc((100vw - 1160px)/2))}
+header h1{font-size:clamp(24px,4vw,36px);line-height:1.12;margin:0 0 9px}header p{margin:0;color:#d5e7db;max-width:850px}
+main{max-width:1160px;margin:22px auto;padding:0 18px 40px}.panel,.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 2px 8px #173d2c0a}
+.filters{display:grid;grid-template-columns:repeat(3,minmax(150px,1fr));gap:14px;margin-bottom:16px}
+label{display:block;font-weight:650;font-size:13px;margin-bottom:6px;color:#33483b}select{width:100%;padding:11px;border:1px solid #cbd8cf;border-radius:8px;background:white;color:var(--ink);font:inherit}
+.status{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:14px 0}.pill{display:inline-block;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:750;background:#e8eee9;color:#405448}
+.decision{display:grid;grid-template-columns:1fr auto;gap:18px;align-items:center;border-left:6px solid var(--amber);margin-bottom:16px}
+.decision h2{margin:0 0 5px;font-size:22px}.decision p{margin:0;color:var(--muted)}.decision strong{font-size:18px}
+.metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}.metric{padding:14px}.metric .k{font-size:12px;color:var(--muted);font-weight:650}.metric .v{font-size:24px;font-weight:750;margin-top:5px}.metric .sub{font-size:12px;color:var(--muted)}
+.chartbox{margin-bottom:16px}.charthead{display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap}.charthead h2{margin:0;font-size:19px}canvas{width:100%;height:300px;display:block;margin-top:12px}
+.note{font-size:13px;color:var(--muted)}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.card h3{margin:0 0 8px;font-size:16px}.card p{margin:5px 0}.error{color:var(--red);font-weight:650}.footer{margin-top:16px;color:var(--muted);font-size:12px}
+button{border:0;background:var(--green);color:white;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer}button:disabled{opacity:.5;cursor:wait}
+@media(max-width:760px){.filters{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.decision{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}canvas{height:260px}}
+</style>
+</head>
+<body>
+<header>
+<h1>Minnesota Ag Weather Dispatch</h1>
+<p>Historical weather analysis for a Minnesota agriculture supply chain. Explore past weather by year and crop to inform planning; historical observations cannot determine today's road or dispatch conditions.</p>
+</header>
+<main>
+<section class="panel">
+<div class="filters">
+<div><label for="county">Weather location</label><select id="county"><option value="St. Cloud, Minnesota">St. Cloud, Minnesota</option></select></div>
+<div><label for="year">Weather year</label><select id="year"><option value="">Loading available years…</option></select></div>
+<div><label for="crop">Crop / freight context</label><select id="crop"><option value="corn">Corn</option><option value="soy">Soybeans</option><option value="wheat">Wheat</option><option value="beets">Sugar beets</option><option value="general">General ag inputs / mixed</option></select></div>
+</div>
+<div class="status"><span class="pill" id="sourceStatus">Connecting to Open-Meteo…</span><span class="pill" id="period">—</span><button id="refresh">Refresh GitHub data</button><label for="localCsv" style="margin:0 0 0 4px;padding:9px 12px;border:1px solid #cbd8cf;border-radius:8px;cursor:pointer;background:white">Load offline CSV</label><input id="localCsv" type="file" accept=".csv,text/csv" style="display:none"></div>
+</section>
+
+<section class="panel decision" id="decision" style="margin-top:16px">
+<div><h2 id="decisionTitle">Loading weather risk…</h2><p id="decisionText">Fetching hourly forecast and weather indicators for the selected hub.</p></div>
+<strong id="riskScore">—</strong>
+</section>
+
+<section class="metrics">
+<div class="card metric"><div class="k">Weather now</div><div class="v" id="weather">—</div><div class="sub" id="temp">Temperature —</div></div>
+<div class="card metric"><div class="k">Precipitation amount</div><div class="v" id="precip">—</div><div class="sub">Total on latest available date</div></div>
+<div class="card metric"><div class="k">Snowfall</div><div class="v" id="snow">—</div><div class="sub">Total on latest available date</div></div>
+<div class="card metric"><div class="k">Visibility</div><div class="v" id="visibility">—</div><div class="sub">Not supplied in CSV</div></div>
+<div class="card metric"><div class="k">Wind speed</div><div class="v" id="wind">—</div><div class="sub">Total on latest available date</div></div>
+</section>
+
+<section class="panel chartbox">
+<div class="charthead"><h2>Historical weather · monthly pattern</h2><span class="note">Monthly precipitation, snowfall, and average wind</span></div>
+<canvas id="chart" aria-label="Chart of precipitation probability, snowfall and wind over the next seven days"></canvas>
+<div class="note">Bars show precipitation probability (%); lines show snowfall (cm) and wind speed (km/h). The chart updates when county, year, or crop changes.</div>
+</section>
+
+<div class="grid2">
+<section class="card"><h3>How to use the recommendation</h3>
+<p><b>Historical score:</b> summarizes precipitation, snowfall, and wind on the latest date in the selected year.</p>
+<p><b>Dispatch caution:</b> this file contains historical observations only. Use a current forecast and road advisories before deciding whether to release LTL or consolidate a full truck.</p>
+<p class="note">Crop selection changes the risk tolerance used by this simple screening rule; it does not change the weather forecast. Confirm carrier capacity, road restrictions, local advisories, loading-site conditions, and customer urgency before dispatch.</p></section>
+<section class="card"><h3>Data source and storage</h3>
+<p><b>Source:</b> Historical Open-Meteo CSV hosted in your GitHub repository, for St. Cloud, Minnesota (45.58875° N, 94.10379° W; elevation 319 m).</p>
+<p><b>Fields present:</b> hourly temperature, snowfall, wind speed at 10 m and 100 m, precipitation amount, and WMO weather code. <b>Not present:</b> precipitation probability and visibility; the dashboard marks these unavailable rather than estimating them.</p>
+<p><b>Where stored:</b> the CSV remains in GitHub. When loaded, parsed rows are held in browser memory only. For offline use, download the CSV and select it with “Load offline CSV.” The dashboard does not save data to a server, database, cookie, or local storage.</p>
+<p class="note">The year selector is populated from the years actually present in the CSV. The crop selector adjusts a simple historical screening score; it does not change observed weather.</p></section>
+</div>
+<div class="footer">Historical weather data provided by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>. GitHub CSV: <a href="https://raw.githubusercontent.com/Tolad-1/-BAIT/refs/heads/main/student/abby-farrell/open-meteo-45.59N94.10W319m.csv" target="_blank" rel="noopener">open St. Cloud data</a>. Load a previously downloaded CSV below for offline use.</div>
+</main>
+<script>
+// Data source: the public raw CSV in the user's GitHub repository.
+// The browser fetches this CSV when online. It keeps parsed rows in JavaScript memory;
+// nothing is written to a server, cookie, or local storage.
+// For offline use, choose a previously downloaded copy with "Load offline CSV".
+const CSV_URL = "https://raw.githubusercontent.com/Tolad-1/-BAIT/refs/heads/main/student/abby-farrell/open-meteo-45.59N94.10W319m.csv";
+const $ = id => document.getElementById(id);
+let allRows = [];
+let sourceLabel = "GitHub CSV";
+const weatherNames = {
+  0:"Clear",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",
+  45:"Fog",48:"Depositing rime fog",51:"Light drizzle",53:"Drizzle",55:"Heavy drizzle",
+  56:"Freezing drizzle",57:"Heavy freezing drizzle",61:"Light rain",63:"Rain",65:"Heavy rain",
+  66:"Freezing rain",67:"Heavy freezing rain",71:"Light snow",73:"Snow",75:"Heavy snow",
+  77:"Snow grains",80:"Rain showers",81:"Rain showers",82:"Heavy rain showers",
+  85:"Snow showers",86:"Heavy snow showers",95:"Thunderstorm",96:"Thunderstorm with hail",99:"Thunderstorm with hail"
+};
+function parseCSV(text) {
+  // Simple CSV parser supports quoted values and commas inside quoted cells.
+  const lines = text.replace(/^\uFEFF/,"").trim().split(/\r?\n/);
+  // Open-Meteo CSV export has two metadata rows, then the variable header row.
+  const headerIndex = lines.findIndex(line => /^time,/.test(line.trim()));
+  if (headerIndex < 0) throw new Error("Could not find the hourly CSV header beginning with 'time,'.");
+  const split = line => {
+    const out=[]; let value="", quoted=false;
+    for(let i=0;i<line.length;i++){
+      const ch=line[i];
+      if(ch === '"'){ if(quoted && line[i+1] === '"'){value+='"';i++;} else quoted=!quoted; }
+      else if(ch === ',' && !quoted){out.push(value);value="";}
+      else value+=ch;
+    }
+    out.push(value); return out;
+  };
+  const headers=split(lines[headerIndex]).map(x=>x.trim());
+  const index = (prefix) => headers.findIndex(h => h.toLowerCase().startsWith(prefix.toLowerCase()));
+  const ix = {
+    time:index("time"),
+    temp:index("temperature_2m"),
+    snow:index("snowfall"),
+    wind:index("wind_speed_10m"),
+    precip:index("precipitation ("),
+    code:index("weather_code")
+  };
+  if(ix.time<0 || ix.precip<0 || ix.snow<0 || ix.wind<0 || ix.code<0)
+    throw new Error("CSV is missing one or more required columns: time, precipitation, snowfall, wind speed, weather code.");
+  const rows=[];
+  for(let i=headerIndex+1;i<lines.length;i++){
+    if(!lines[i].trim()) continue;
+    const cells=split(lines[i]), number=k=>k<0?null:(cells[k]===""?null:Number(cells[k]));
+    const time=cells[ix.time];
+    if(!time || !/^\d{4}-\d{2}-\d{2}/.test(time)) continue;
+    rows.push({time, date:time.slice(0,10), year:time.slice(0,4),
+      temp:number(ix.temp), snow:number(ix.snow)||0, wind:number(ix.wind),
+      precip:number(ix.precip)||0, code:number(ix.code)});
+  }
+  if(!rows.length) throw new Error("The CSV contains no hourly weather rows.");
+  return rows;
+}
+function setStatus(s){$("sourceStatus").textContent=s;}
+function fmt(n,d=1){return Number.isFinite(n)?n.toFixed(d):"—";}
+function max(a){const v=a.filter(Number.isFinite);return v.length?Math.max(...v):0;}
+function min(a){const v=a.filter(Number.isFinite);return v.length?Math.min(...v):null;}
+function sum(a){return a.reduce((x,y)=>x+(Number(y)||0),0);}
+function avg(a){const v=a.filter(Number.isFinite);return v.length?v.reduce((x,y)=>x+y,0)/v.length:null;}
+function getYears(){
+  return [...new Set(allRows.map(r=>r.year))].sort();
+}
+function populateYears(){
+  const years=getYears(), sel=$("year"), previous=sel.value;
+  sel.innerHTML="";
+  years.forEach(y=>{const o=document.createElement("option");o.value=y;o.textContent=y;sel.appendChild(o);});
+  sel.value=years.includes(previous)?previous:years[years.length-1];
+}
+function dayGroups(rows){
+  const g={}; rows.forEach(r=>(g[r.date]??=[]).push(r)); return g;
+}
+function render(){
+  if(!allRows.length)return;
+  const year=$("year").value, crop=$("crop").value;
+  const selected=allRows.filter(r=>r.year===year);
+  if(!selected.length)return;
+  const days=dayGroups(selected), dates=Object.keys(days).sort(), latest=dates[dates.length-1];
+  const last=days[latest], precip=sum(last.map(r=>r.precip)), snow=sum(last.map(r=>r.snow));
+  const wind=max(last.map(r=>r.wind)), temp=avg(last.map(r=>r.temp));
+  const codes=last.map(r=>r.code).filter(Number.isFinite);
+  const commonCode=codes.length?codes[Math.floor(codes.length/2)]:null;
+  $("weather").textContent=weatherNames[commonCode]||"Historical";
+  $("temp").textContent=temp===null?"Temperature unavailable":`Average temperature ${fmt(temp)} °C`;
+  $("precip").textContent=`${fmt(precip,2)} mm`;
+  $("snow").textContent=`${fmt(snow,2)} cm`;
+  $("visibility").textContent="N/A";
+  $("wind").textContent=`${fmt(wind,1)} km/h`;
+  $("period").textContent=`${dates[0]} to ${latest} · ${selected.length.toLocaleString()} hourly records`;
+  // Historical-only scoring. It describes the latest day in the selected year and is not a live dispatch call.
+  const tolerance={corn:1,soy:1.05,wheat:.95,beets:.9,general:1}[crop]||1;
+  const score=((precip>=10?3:precip>=5?2:precip>=1?1:0)+
+    (snow>=2?3:snow>0?1:0)+(wind>=50?3:wind>=35?2:wind>=25?1:0))*tolerance;
+  $("decision").style.borderLeftColor="#a85b08";
+  $("decisionTitle").textContent="Historical weather profile — not a live dispatch recommendation";
+  $("riskScore").textContent=`Historical score ${score.toFixed(1)}`;
+  $("decisionText").textContent=`Latest available date in ${year}: ${latest}. Recorded precipitation ${fmt(precip,2)} mm, snowfall ${fmt(snow,2)} cm, and peak hourly wind ${fmt(wind,1)} km/h. Use this for historical planning and seasonal comparison only; it cannot determine whether trucks should move today. Visibility and precipitation probability are not included in this CSV.`;
+  drawChart(selected);
+}
+function drawChart(rows){
+  const c=$("chart"),ctx=c.getContext("2d"),w=c.clientWidth,h=c.clientHeight,dpr=window.devicePixelRatio||1;
+  c.width=w*dpr;c.height=h*dpr;ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
+  const groups={};
+  rows.forEach(r=>{const m=r.date.slice(0,7);(groups[m]??=[]).push(r);});
+  const data=Object.entries(groups).sort((a,b)=>a[0].localeCompare(b[0])).map(([month,a])=>({
+    label:month, p:sum(a.map(x=>x.precip)), s:sum(a.map(x=>x.snow)), w:avg(a.map(x=>x.wind))
+  }));
+  const L=48,R=16,T=32,B=42,pw=w-L-R,ph=h-T-B;
+  const pmax=Math.max(10,...data.map(d=>d.p)),smax=Math.max(1,...data.map(d=>d.s)),wmax=Math.max(10,...data.map(d=>d.w||0));
+  ctx.font="11px system-ui";ctx.strokeStyle="#e2e9e4";ctx.fillStyle="#65756b";
+  for(let i=0;i<=4;i++){let y=T+ph*i/4;ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-R,y);ctx.stroke();ctx.fillText(fmt(pmax*(1-i/4),0),4,y+4);}
+  const step=pw/Math.max(data.length,1),bw=Math.min(30,step*.55);
+  data.forEach((d,i)=>{let x=L+step*i+step/2,bh=ph*d.p/pmax;ctx.fillStyle="#8bbba0";ctx.fillRect(x-bw/2,T+ph-bh,bw,bh);ctx.fillStyle="#52645a";ctx.textAlign="center";ctx.fillText(d.label.slice(2),x,h-17);});
+  function line(key,scale,color){ctx.beginPath();data.forEach((d,i)=>{let x=L+step*i+step/2,y=T+ph-(Math.min(d[key]||0,scale)/scale)*ph;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.stroke();data.forEach((d,i)=>{let x=L+step*i+step/2,y=T+ph-(Math.min(d[key]||0,scale)/scale)*ph;ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();});}
+  line("s",smax,"#3275b8");line("w",wmax,"#c47b27");
+  ctx.textAlign="left";ctx.fillStyle="#8bbba0";ctx.fillRect(L,8,9,9);ctx.fillStyle="#52645a";ctx.fillText("Precipitation mm",L+13,17);
+  ctx.fillStyle="#3275b8";ctx.fillRect(L+130,8,9,9);ctx.fillStyle="#52645a";ctx.fillText("Snow cm",L+143,17);
+  ctx.fillStyle="#c47b27";ctx.fillRect(L+210,8,9,9);ctx.fillStyle="#52645a";ctx.fillText("Avg wind km/h",L+223,17);
+}
+function loadText(text,label){
+  allRows=parseCSV(text);sourceLabel=label;populateYears();setStatus(`${label} loaded · ${allRows.length.toLocaleString()} hourly records`);render();
+}
+async function loadGitHub(){
+  $("refresh").disabled=true;setStatus("Loading historical CSV from GitHub…");
+  try{
+    const response=await fetch(CSV_URL,{cache:"no-store"});
+    if(!response.ok)throw new Error(`GitHub returned HTTP ${response.status}`);
+    loadText(await response.text(),"GitHub historical CSV");
+  }catch(e){
+    setStatus("Could not load GitHub data");
+    $("decisionTitle").textContent="Load the CSV file to continue";
+    $("decisionText").textContent=`${e.message}. If you are offline, use "Load offline CSV" to choose the CSV you downloaded from GitHub.`;
+  }finally{$("refresh").disabled=false;}
+}
+$("refresh").addEventListener("click",loadGitHub);
+$("localCsv").addEventListener("change",async e=>{
+  const file=e.target.files?.[0];if(!file)return;
+  try{loadText(await file.text(),`Offline file: ${file.name}`);}
+  catch(err){setStatus("CSV could not be read");$("decisionText").textContent=err.message;}
+});
+$("year").addEventListener("change",render);
+$("crop").addEventListener("change",render);
+window.addEventListener("resize",()=>{if(allRows.length)render();});
+loadGitHub();
+</script>
+</body></html>
