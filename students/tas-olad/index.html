@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minnesota Corn Sourcing Signal | BAIT</title>
+<style>
+  :root { --ink:#17231f; --muted:#63716b; --green:#245b45; --pale:#edf4ef; --line:#dce5df; --gold:#d4a64a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#f6f8f6; color:var(--ink); font:16px/1.5 system-ui,-apple-system,Segoe UI, sans-serif; }
+  header { background:#173e30; color:white; padding:34px 22px; }
+  .wrap { max-width:1000px; margin:0 auto; }
+  .eyebrow { color:#c7dfcf; text-transform:uppercase; letter-spacing:.12em; font-size:.75rem; font-weight:700; }
+  h1 { margin:.35rem 0; font-size:clamp(1.8rem,4vw,2.8rem); line-height:1.1; }
+  header p { max-width:760px; color:#e3eee7; margin:.75rem 0 0; }
+  main { max-width:1000px; margin:26px auto; padding:0 18px 40px; }
+  .question,.panel,.metric { background:white; border:1px solid var(--line); border-radius:14px; }
+  .question { padding:20px 22px; border-left:5px solid var(--gold); margin-bottom:18px; }
+  .question strong { display:block; color:var(--green); font-size:.8rem; text-transform:uppercase; letter-spacing:.08em; }
+  .question p { margin:6px 0 0; font-size:1.1rem; font-weight:600; }
+  .controls { display:flex; align-items:end; gap:14px; flex-wrap:wrap; margin:18px 0; }
+  label { display:block; color:var(--muted); font-size:.85rem; font-weight:650; margin-bottom:5px; }
+  select { padding:10px 12px; border:1px solid #b9c9bf; border-radius:8px; background:white; font:inherit; min-width:150px; }
+  .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin:16px 0; }
+  .metric { padding:16px; }
+  .metric .label { color:var(--muted); font-size:.82rem; }
+  .metric .value { font-size:1.55rem; font-weight:750; margin-top:3px; }
+  .metric .sub { color:var(--muted); font-size:.78rem; }
+  .panel { padding:18px; margin:16px 0; }
+  h2 { font-size:1.12rem; margin:0 0 12px; }
+  canvas { width:100%; height:310px; display:block; }
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:.93rem; }
+  th,td { padding:10px 8px; text-align:left; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-size:.8rem; text-transform:uppercase; letter-spacing:.04em; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .note { color:var(--muted); font-size:.85rem; }
+  .callout { background:var(--pale); padding:14px 16px; border-radius:10px; margin-top:14px; }
+  a { color:var(--green); }
+  footer { color:var(--muted); font-size:.8rem; padding:14px 0; }
+  @media(max-width:600px) { canvas { height:250px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="eyebrow">BAIT · Food &amp; Beverage Supply Chain</div>
+    <h1>Minnesota Corn Sourcing Signal</h1>
+    <p>A quick look at statewide corn-for-grain production to support early sourcing conversations and planning.</p>
+  </div>
+</header>
+<main>
+  <section class="question">
+    <strong>Decision question</strong>
+    <p>Should BAIT flag potential corn-sourcing pressure for its next planning cycle based on Minnesota's latest reported corn-for-grain production compared with the previous ten-year average?</p>
+  </section>
+
+  <div class="controls">
+    <div>
+      <label for="yearSelect">Highlight a production year</label>
+      <select id="yearSelect" aria-label="Select year"></select>
+    </div>
+    <div class="note" id="dataStatus" role="status">Loading saved data…</div>
+  </div>
+
+  <section class="metrics" aria-live="polite">
+    <div class="metric"><div class="label">Selected year's production</div><div class="value" id="selectedValue">—</div><div class="sub">Bushels of corn for grain</div></div>
+    <div class="metric"><div class="label">2015–2024 average</div><div class="value" id="averageValue">—</div><div class="sub">Baseline from the ten prior years</div></div>
+    <div class="metric"><div class="label">Difference from baseline</div><div class="value" id="differenceValue">—</div><div class="sub" id="differenceSub">Selected year vs. baseline</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>Annual Minnesota corn-for-grain production</h2>
+    <canvas id="productionChart" role="img" aria-label="Bar chart of Minnesota corn-for-grain production from 2015 through 2025"></canvas>
+    <p class="note">The dashed reference line is the 2015–2024 average. Choose a year above to highlight its bar.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Stored data</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Year</th><th style="text-align:right">Production (bushels)</th><th style="text-align:right">Difference vs. baseline</th></tr></thead>
+        <tbody id="dataRows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="callout" id="interpretation">
+    <strong>Planning interpretation</strong>
+    <p id="interpretationText">The page will calculate the comparison after the saved CSV loads.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Source and limitations</h2>
+    <p>Source: USDA National Agricultural Statistics Service (NASS), Quick Stats. The local CSV contains Minnesota state-level annual records for “CORN, GRAIN - PRODUCTION, MEASURED IN BU,” 2015–2025.</p>
+    <p>Original USDA query: <a href="https://quickstats.nass.usda.gov/results/EE31286B-22C5-3414-AE4C-E855D535F1F1" target="_blank" rel="noopener">USDA NASS Quick Stats results</a>. General database: <a href="https://quickstats.nass.usda.gov/" target="_blank" rel="noopener">Quick Stats</a>.</p>
+    <p>Local copy downloaded from the team's shared project CSV on November 19, 2026. The shared file was added to the team repository on November 17, 2026; the original USDA extraction date was not recorded in that file.</p>
+    <p class="note">This is a statewide historical production signal, not a forecast or a measure of available inventory, local supplier capacity, corn prices, or BAIT's actual ingredient demand. Higher production does not automatically mean lower prices or guaranteed supply. Some NASS county-level data may be withheld to protect confidentiality.</p>
+  </section>
+  <footer>Student project · Data file: corn-production.csv · Built for local/static-data use</footer>
+</main>
+
+<script>
+let productionData = [];
+let averageBaseline = 0;
+
+// ME: This is where the page brings the data in. It reads the CSV file saved beside this HTML page,
+// rather than calling USDA every time the page opens.
+async function loadData() {
+  const response = await fetch("corn-production.csv");
+  if (!response.ok) throw new Error("Could not load corn-production.csv. Run this page from GitHub Pages or a local web server.");
+  const csvText = await response.text();
+  const lines = csvText.trim().split(/\r?\n/);
+  const headers = lines[0].split(",");
+  const yearIndex = headers.indexOf("year");
+  const valueIndex = headers.indexOf("production_bu");
+
+  // ME: The rows are kept in this array while the page is open. Each row has a year and its
+  // production total, converted into numbers so the page can compare and chart them.
+  productionData = lines.slice(1).map(line => {
+    const cells = line.split(",");
+    return { year: Number(cells[yearIndex]), production: Number(cells[valueIndex]) };
+  }).filter(d => Number.isFinite(d.year) && Number.isFinite(d.production));
+
+  if (productionData.length < 2) throw new Error("The saved CSV did not contain enough usable rows.");
+  const priorYears = productionData.filter(d => d.year >= 2015 && d.year <= 2024);
+  averageBaseline = priorYears.reduce((sum, d) => sum + d.production, 0) / priorYears.length;
+
+  const select = document.getElementById("yearSelect");
+  select.innerHTML = productionData.map(d => `<option value="${d.year}">${d.year}</option>`).join("");
+  select.value = String(productionData[productionData.length - 1].year);
+  select.addEventListener("change", updatePage);
+  document.getElementById("dataStatus").textContent = `Loaded ${productionData.length} annual records from the saved CSV.`;
+  updatePage();
+}
+
+// ME: This is where the data is changed for the display. The selected year is filtered out,
+// compared with the 2015–2024 average, and then sent to the metric cards, table, and chart.
+function updatePage() {
+  const selectedYear = Number(document.getElementById("yearSelect").value);
+  const selected = productionData.find(d => d.year === selectedYear);
+  const pct = ((selected.production - averageBaseline) / averageBaseline) * 100;
+
+  document.getElementById("selectedValue").textContent = formatMillions(selected.production);
+  document.getElementById("averageValue").textContent = formatMillions(averageBaseline);
+  document.getElementById("differenceValue").textContent = `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+  document.getElementById("differenceSub").textContent = `${selectedYear} compared with 2015–2024 average`;
+
+  document.getElementById("dataRows").innerHTML = productionData.map(d => {
+    const change = ((d.production - averageBaseline) / averageBaseline) * 100;
+    return `<tr><td>${d.year}</td><td class="num">${d.production.toLocaleString("en-US")}</td><td class="num">${change >= 0 ? "+" : ""}${change.toFixed(1)}%</td></tr>`;
+  }).join("");
+
+  const direction = pct >= 0 ? "above" : "below";
+  document.getElementById("interpretationText").textContent =
+    `${selectedYear} production was ${Math.abs(pct).toFixed(1)}% ${direction} the 2015–2024 average. Use this as a reason to review supplier conversations and other market signals—not as proof that corn will be scarce or plentiful.`;
+  drawChart(selectedYear);
+}
+
+function formatMillions(value) {
+  return `${(value / 1e9).toFixed(3)}B`;
+}
+
+function drawChart(selectedYear) {
+  const canvas = document.getElementById("productionChart");
+  const ctx = canvas.getContext("2d");
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const scale = window.devicePixelRatio || 1;
+  canvas.width = width * scale;
+  canvas.height = height * scale;
+  ctx.scale(scale, scale);
+  ctx.clearRect(0, 0, width, height);
+
+  const pad = { top: 18, right: 12, bottom: 42, left: 66 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const maxValue = Math.max(...productionData.map(d => d.production), averageBaseline) * 1.12;
+  const y = v => pad.top + plotH - (v / maxValue) * plotH;
+
+  ctx.font = "11px system-ui";
+  ctx.fillStyle = "#63716b";
+  ctx.strokeStyle = "#e3eae5";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const val = maxValue * i / 4;
+    const yy = y(val);
+    ctx.beginPath(); ctx.moveTo(pad.left, yy); ctx.lineTo(width - pad.right, yy); ctx.stroke();
+    ctx.textAlign = "right";
+    ctx.fillText(`${(val / 1e9).toFixed(1)}B`, pad.left - 8, yy + 4);
+  }
+
+  ctx.save();
+  ctx.setLineDash([6, 4]);
+  ctx.strokeStyle = "#bd8a2d";
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(pad.left, y(averageBaseline)); ctx.lineTo(width - pad.right, y(averageBaseline)); ctx.stroke();
+  ctx.restore();
+
+  const slot = plotW / productionData.length;
+  const barW = Math.max(8, slot * .62);
+  productionData.forEach((d, i) => {
+    const x = pad.left + i * slot + (slot - barW) / 2;
+    const barY = y(d.production);
+    ctx.fillStyle = d.year === selectedYear ? "#d4a64a" : "#34775a";
+    ctx.fillRect(x, barY, barW, pad.top + plotH - barY);
+    ctx.fillStyle = "#63716b";
+    ctx.textAlign = "center";
+    ctx.fillText(String(d.year).slice(2), x + barW / 2, height - 17);
+  });
+}
+
+window.addEventListener("resize", () => {
+  if (productionData.length) drawChart(Number(document.getElementById("yearSelect").value));
+});
+loadData().catch(error => {
+  document.getElementById("dataStatus").textContent = error.message;
+  document.getElementById("interpretationText").textContent = "The chart could not load. Make sure index.html and corn-production.csv are in the same folder and open the folder through a web server.";
+});
+</script>
+</body>
+</html>
